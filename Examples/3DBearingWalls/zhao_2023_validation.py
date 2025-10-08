@@ -133,6 +133,7 @@ model_ep.set_interface_properties(
 
 )
 
+
 start_time = time.time()
 print("Running elastoplastic model...")
 model_ep.run_model(u_x, u_y, u_z, print_iteration=1)
