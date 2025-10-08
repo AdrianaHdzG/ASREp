@@ -131,7 +131,7 @@ class ASRE_3D_solid_model:
                     message = f'ASRE is not precompiled for {pltm} {platform.processor()}, please compile the ASRE cpp library'
         elif pltm == "win32":
             lib_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                    "ASREcpp", "bin", "win32", "libASRElib3DSolid.dll")
+                                    "ASREcpp", "bin", "win32", "ASRElib3DSolid.dll")
             if os.path.exists(lib_path):
                 c_lib = CDLL(lib_path)
             else:
