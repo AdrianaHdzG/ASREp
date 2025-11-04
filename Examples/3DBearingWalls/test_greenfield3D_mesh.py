@@ -23,34 +23,58 @@ import time
 # Read the mesh file
 input_dir = "./input"
 output_dir = "./output"
-mesh_file = os.path.join(input_dir, "burd_mat_20250901T162943.mat")
+# mesh_file = os.path.join(input_dir, "burd_mat_20250901T162943.mat")
+mesh_file = os.path.join(input_dir, "demo_mat_20251104T143806.mat") # One Wall
+#mesh_file = os.path.join(input_dir, "burd_mat_rotated_20251016T134538.mat") 
 mesh_data = loadmat(mesh_file)
 
 mesh_data['wholeElem2n'] = mesh_data['wholeElem2n'] - 1  # convert to zero-based index
-mesh_data['elem2nInter'] = mesh_data['elem2nInter'] - 1  # convert to zero-based index
+#mesh_data['elem2nInter'] = mesh_data['elem2nInter'] - 1  # convert to zero-based index
+
 # Define building properties
 Eb = 3e9  # Young's modulus of the building (Pa)
 nu = 0.2  # Poisson's ratio of the building
 rho = 23.75*10**3  # Density of the building (N/m^3) burd et al. 2022 table 1
+
 # Define soil properties
 Gs = 6e6  # Shear modulus of the soil (Pa)
 nus = 0.2 # Poisson's ratio of the soil
 EsNominal = 2*Gs*(1+nus) # Nominal Young's modulus of the soil (Pa)
+
 # Define interface properties
 mu_int = 0.3 # friction coefficient of the interface
 lim_t_int = 0 # tensile strength of the interface (Pa)
 lim_c_int = -347.8261*1000 # compressive strength of the interface (Pa). It must
 
-# The current soil flexibility model only works for ground surface loading
+# The current soil flexibility model only works for ground surface loading. Normalize Z so ground = 0
 mesh_data['wholeNodesXYZ'][:, 2] = mesh_data['wholeNodesXYZ'][:, 2] - np.min(mesh_data['wholeNodesXYZ'][:, 2])
-mesh_data['interNodesXYZ'][:, 2] = 0.0
+#mesh_data['interNodesXYZ'][:, 2] = 0.0
+
+# Apply building offset
+L_x = 10.9 # width of station box
+building_offset = 5.0 # distance from rw to building edge
+y_building = 0 # y location of the building
+
+x_shift = 2 * L_x + building_offset
+y_shift = y_building
+
+mesh_data['wholeNodesXYZ'][:, 0] += x_shift
+mesh_data['wholeNodesXYZ'][:, 1] += y_shift
+#mesh_data['interNodesXYZ'][:, 0] += x_shift
+#mesh_data['interNodesXYZ'][:, 1] += y_shift
+
+# --- Extract ground nodes ---
 wholeNodesXYZ = mesh_data['wholeNodesXYZ']  # (N, 3) array
 min_z = np.min(wholeNodesXYZ[:, 2])
 print(f"Minimum z value (ground surface): {min_z} m")
 groundNodeInd = np.where(wholeNodesXYZ[:, 2] == min_z)[0]  # indices of ground nodes
+
+
 x = wholeNodesXYZ[groundNodeInd, 0]
 y = wholeNodesXYZ[groundNodeInd, 1]
 z = wholeNodesXYZ[groundNodeInd, 2]
+
+
 vl = 1.65/100.0
 d = 11.0
 z0 = 23.0 - 1.0 # The 1.0 is to model the embedding of building foundation
@@ -59,8 +83,21 @@ yf = 500.0 # assume the tunnel start point is far away from the building
 k = 0.57
 delta = 0.3
 
-# If use empirical GF model
-u_x, u_y, u_z = gdm.ground_disp_Zhao_2023(x, y, z, vl, d, z0, ys, yf, k, delta)
+# If use empirical GF model ()
+#u_x, u_y, u_z = gdm.ground_disp_Zhao_2023(x, y, z, vl, d, z0, ys, yf, k, delta)
+
+u_x, u_y, u_z = gdm.run_greenfield_3D_cloud_xyz(
+    x, y, z,
+    Hw=14.0, L_x=10.9, L_y=34.6, He_Hwratio=1.0,
+    nu=0.499,
+    switch_shape=50, C1=0.3439, C2=0.1769,  # C3 inferred as 1-C1-C2
+    beta_CCS_wall_1=0.0011, beta_CCS_wall_2=0.0011,
+    beta_CCS_wall_3=0.0011, beta_CCS_wall_4=0.0011,
+    delta_z_cavities=1.0, delta_xyperimeter_cavities=1,
+    switch_solution_type=3,
+)
+
+u_z = -1 * u_z  # Change sign to match the convention that downward is negative In this model in Andreas work, downward is positive. 
 
 
 # If use Burd et al. 2022 GF (based on FEM)
@@ -70,15 +107,15 @@ u_x, u_y, u_z = gdm.ground_disp_Zhao_2023(x, y, z, vl, d, z0, ys, yf, k, delta)
 #u_x = x / (z0 - z) * u_z
 #u_y = np.zeros_like(u_z)
 
-np.savetxt(os.path.join(output_dir, 'greenfield_ground_disp.txt'), np.column_stack((u_x, u_y, u_z)))
-print("Greenfield ground displacements saved to 'greenfield_ground_disp.txt'.")
+np.savetxt(os.path.join(output_dir, 'greenfield_ground_disp_singlewall.txt'), np.column_stack((u_x, u_y, u_z)))
+print("Greenfield ground displacements saved to 'greenfield_ground_disp_singlewall.txt'.")
 
 # Prepare inputs for ASRElib3DSolid
 model_el = ASREp.ASRE_3D_solid_model(
     mesh_data['wholeNodesXYZ'],
     mesh_data['wholeElem2n'],
-    mesh_data['interNodesXYZ'],
-    mesh_data['elem2nInter'],
+    #mesh_data['interNodesXYZ'],
+    #mesh_data['elem2nInter'],
     solver = 'elastic'
 )
 model_el.set_building_properties(
@@ -116,8 +153,8 @@ print("Elastic model results saved to 'model_el.pkl'.")
 model_ep = ASREp.ASRE_3D_solid_model(
     mesh_data['wholeNodesXYZ'],
     mesh_data['wholeElem2n'],
-    mesh_data['interNodesXYZ'],
-    mesh_data['elem2nInter'],
+    #mesh_data['interNodesXYZ'],
+    #mesh_data['elem2nInter'],
     solver = 'elasto-plastic'
 )
 model_ep.set_building_properties(

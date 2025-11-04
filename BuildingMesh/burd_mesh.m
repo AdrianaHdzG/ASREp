@@ -1,23 +1,28 @@
 clear 
 close all
 %% Input 
-baseCornersXYZ = [ -20, -5, 0;
+baseCornersXYZ = [-20, -5, 0;
                   20, -5, 0;
                   20,  5, 0;
                  -20,  5, 0];
-% The define of base wall has to be counter clock wise             
+
+% The define of base wall has to be counter clock wise 
+% which corners are connected into walls 
 baseWall = [1 2;
             2 3;
             3 4;
             4 1];
+
 WallThick = 0.215*ones(4,1);
 WallThickNoElem = 2;
 WallExterElemApproSize = 1;
 FootThick = 1*ones(4,1);
 WallHeight = 8.5;
 heightElemSize = 1;
-% input of opening
-% opening is defined as wall_no, x1/y1 z1 x2/y2 z2 
+
+% Input of opening
+% opening is defined as wall_no, x1_or_y1 z1 x2_or_y2 z2 
+% --- Example: add window on wall 1, 2.25–3.75 m along the wall, 1–3 m high (z)
 opening = [];
 opening = [opening; [1 2.25 1 3.75 3]];
 opening = [opening; [1 2.25 5 3.75 7]];
@@ -29,28 +34,51 @@ opening = [opening; [1 13.25 1 14.75 3]];
 opening = [opening; [1 13.25 5 14.75 7]];
 opening = [opening; [1 16.25 1 17.75 3]];
 opening = [opening; [1 16.25 5 17.75 7]];
+
+% --- Mirror the same pattern to the right half of wall 1
 opening2 = opening;
 opening2(:,2) = opening2(:,2)+20;
 opening2(:,4) = opening2(:,4)+20;
 opening = [opening; opening2];
+
+% --- Copy entire pattern from wall 1 to wall 3 (opposite side)
 opening2 = opening;
 opening2(:,1) = 3;
 opening = [opening; opening2];
+
+% --- Add a few extra small windows explicitly on wall 3
 opening = [opening; [3 2.25 1 3.75 3]];
 opening = [opening; [3 2.25 5 3.75 7]];
 opening = [opening; [3 5.25 1 6.75 3]];
 opening = [opening; [3 5.25 5 6.75 7]];
+
+
+% --- Step 5: extra window near far-right end of wall 1
 opening = [opening; [1 36.25 1 37.75 3]];
+
+% --- Zero-height "split markers" at mid-wall (for mesh alignment)
+% These are not real openings; they just force nodes to exist
+% at the wall’s mid-point (20 m) and at ±half wall-thickness offsets
 opening = [opening; [1 20-0.215/2 0 20+0.215/2 0]];
 opening = [opening; [1 20 0 20 0]];
 opening = [opening; [3 20-0.215/2 0 20+0.215/2 0]];
 opening = [opening; [3 20 0 20 0]];
+
 %--------------------Foundation----------------------------
 foundationHeight = 0.5;
 foundationWidth = 1*ones(size(baseWall,1),1);
 foundationOutNoElem = 2;
 foundationInNoElem = 2;
 foundationHeighNoElem = 2;
+
+
+%%--- CONFIG: rotation ---
+applyRotation = true;   % set to true to rotate mesh at the end
+theta = 90;         % rotation angle in degrees (about Z)
+Rz = [cosd(theta) -sind(theta) 0;  % rotation matrix about Z
+      sind(theta)  cosd(theta) 0;
+      0            0           1];
+
 
 %% Generate nodes
 % WallExterElemTrueSize = zeros(size(WallThick));
@@ -62,11 +90,12 @@ WallOpenNo = zeros(size(WallThick));
     WallExterElemApproSize, opening);
 
 
-
 baseNodesXYZ = zeros(sum(WallNoElem)*(WallThickNoElem+1),3);
 baseNodesXYZ(1:sum(WallNoElem),:) = baseExterNodesXYZ;
 
 outerCornersXYZ = baseCornersXYZ;
+
+
 for i=1:WallThickNoElem
     % find corners
     newCornersXYZ = offsetCurveIn(outerCornersXYZ, baseWall, WallThick/WallThickNoElem);
@@ -446,6 +475,9 @@ interWallCorners = [+0.215/2 -5+0.215 0;
 InterCentralNodesXYZ(end,:) = [];
 InterNodesXYZ = [InterNodesXYZ; InterCentralNodesXYZ];
 temp = InterNodesXYZ;
+
+
+
 for i = 2:length(heightZ)
     temp(:,3) = heightZ(i);
     InterNodesXYZ = [InterNodesXYZ; temp];
@@ -454,6 +486,8 @@ end
 wholeNodesXYZ = [wholeNodesXYZ; InterNodesXYZ];
 
 interElem2n = zeros(InterWallNoElem*WallThickNoElem*WallHeightNoElem,8);
+
+
 for i = 1:InterWallNoElem
     for j = 1:WallHeightNoElem
        if i==1
@@ -562,6 +596,7 @@ for i = 1:InterWallNoElem
        end
     end
 end
+
 %% Move the mesh down by 0.5 meter
 wholeNodesXYZ(:,3) = wholeNodesXYZ(:,3) - 0.5;
 PlotMesh(wholeNodesXYZ, interElem2n, 0)
@@ -672,10 +707,24 @@ PlotMesh(interNodesXYZ(:,1:2), elem2nInter, 0)
 interNodesXYZ(:,3) = 0;
 %
 
+% %% --- OPTIONAL END-ROTATION ---
+% if applyRotation
+%     wholeNodesXYZ = wholeNodesXYZ * Rz.';      % all 3D nodes
+%     if exist('interNodesXYZ','var') && ~isempty(interNodesXYZ)
+%         interNodesXYZ = interNodesXYZ * Rz.';  % interface nodes
+%     end
+%     baseCornersXYZ = baseCornersXYZ * Rz.';    % reference corners for post-processing
+% end
+
+%% quick visual check
+
+PlotMesh(wholeNodesXYZ, wholeElem2n, 0);
+axis equal; grid on; view(3);
+title(sprintf('AFTER rotation: %.1f° about Z', theta));
 
 %% Save
-% oldFolder = cd(oldFolder);
-timeString = datestr(datetime('now'),30);
-timberElemIndex = [1 1];
-title = strcat('burd_mat_',timeString,'.mat');
-save(title,'wholeNodesXYZ','wholeElem2n','interNodesXYZ','elem2nInter', 'timberElemIndex')
+%%oldFolder = cd(oldFolder);
+% timeString = datestr(datetime('now'),30);
+% timberElemIndex = [1 1];
+% title = strcat('burd_mat_rotated_',timeString,'.mat');
+% save(title,'wholeNodesXYZ','wholeElem2n','interNodesXYZ','elem2nInter', 'timberElemIndex')

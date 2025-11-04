@@ -185,6 +185,8 @@ wallNodesXYZ(WallHeightNoElem*size(baseNodesXYZ,1)+1:(WallHeightNoElem+1)*size(b
 wallNodesXYZ(WallHeightNoElem*size(baseNodesXYZ,1)+1:(WallHeightNoElem+1)*size(baseNodesXYZ,1),3) = ...
        heightZ(end);
 %% Remove open element
+% delete any brick elements that sit where a window/door opening should be 
+% → turning the solid wall into a wall with holes.
 windowElemNo = [];
 for i = 1:size(opening,1)
     wall_no = opening(i, 1);

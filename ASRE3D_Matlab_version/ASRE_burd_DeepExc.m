@@ -743,7 +743,7 @@ eps_principal = zeros(size(wholeElem2n, 1), 3);
 centroidXYZ = zeros(size(wholeElem2n, 1), 3);
 u_s = zeros(length(x),1);
 u_s(newNodeDOF) = u_total;
-
+%%
 figure
 plot3(ox(oz==min(oz)), oy(oz==min(oz)), Uffz(oz==min(oz),1),'x')
 hold on

@@ -134,7 +134,7 @@ class ASRE_3D_solid_model:
                                     "ASREcpp", "bin", "win32", "ASRElib3DSolid.dll")
             print("[ASRE] lib_path:", lib_path)
             print("[ASRE] exists? ", os.path.exists(lib_path))
-                                    "ASREcpp", "bin", "win32", "ASRElib3DSolid.dll")
+                                    
             if os.path.exists(lib_path):
                 c_lib = CDLL(lib_path)
             else:

@@ -26,9 +26,9 @@ WallThick = 0.2*ones(4,1);
 % different width
 foundationWidth = 1*ones(size(baseWall,1),1);
 % Height of the walls
-WallHeight = 3;
+WallHeight = 6;
 % Height of the foundation
-foundationHeight = 1;
+foundationHeight = 0.5;
 % No opening in the facade in this demo
 opening = [];
 %--------------------Meshing parameters----------------------------
@@ -38,6 +38,12 @@ heightElemSize = 1; % Approximage facade element size in the vertical direction
 foundationOutNoElem = 2; % Number of foundation element outside of the facade 
 foundationInNoElem = 2; % Number of foundation element inside of the facade
 foundationHeighNoElem = 2; % Number of foundation element in the vertical direction
+
+theta = 90;              % rotation angle in degrees
+R = [cosd(theta)  0  sind(theta);
+     0            1  0;
+    -sind(theta)  0  cosd(theta)];
+
 
 %% Generate facade nodes (wallNodesXYZ) and mesh (elem2n)
 % nodes
