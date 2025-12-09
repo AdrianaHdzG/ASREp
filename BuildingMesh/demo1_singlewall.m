@@ -9,20 +9,36 @@
 clear 
 close all
 %% Input
+% Define the folder and filename of the building cooridantes
+folderPath = 'C:\Users\Adriana.Hernandez\OneDrive - Aarhus universitet\Industrial PhD\05 Data\Kronos\kk\processed';
+fileName   = 'buildingcoordinates_0812.xlsx';
+fullPath = fullfile(folderPath, fileName);
+data = readtable(fullPath);
+head(data)
+
+
 % Define the coordinate of facade corners
-baseCornersXYZ = [15.88511916,	-1.643095235, 0;
-                 15.81662876,	29.67312994, 0];
+% Create the Mesh. Here should be the corners for the building. Currently
+% it is just a single wall. 
+baseCornersXYZ = [data.x_local(:),	data.y_local(:), zeros(length(data.x_local), 1)];
 
-
+figure; hold on; axis equal; grid on; box on
+plot(baseCornersXYZ(:,1), baseCornersXYZ(:,2), 'ko-', 'LineWidth', 1.5, 'MarkerFaceColor', 'k')
+xlabel('x'); ylabel('y'); title('Façade baseline (z=0)')
 
 
 % Define the connectivity of the corners, the define of base wall has 
-% to be counter clock wise             
-baseWall = [1 2];
+% to be counter clock wise
+for ii = 1:length(data.x_local)-1
+ baseWall(ii,1) = ii;
+ baseWall(ii,2) = ii+1;
+
+end
 
 
 
-% Thickness of each wall, each wall can have different thickness       
+% Thickness of each wall, each wall can have different thickness  
+% Thickness of each wall, each wall can have different thickness 
 WallThick = 0.2*ones(1,1);
 
 
@@ -352,12 +368,107 @@ elem2nFoundReorder(:,5:8) = elem2nFound(:,1:4);
 wholeElem2n = [elem2n; elem2nFoundReorder];
 PlotMesh(wholeNodesXYZ, wholeElem2n,0)
 
+%% InterFace elems
+% elem2nInter = elem2nFoundReorder(end-(WallThickNoElem+foundationOutNoElem+foundationInNoElem)*...
+%     sum(WallNoElem)+1:end,:);
+% PlotMesh(wholeNodesXYZ, elem2nInter, 0)
 
+bottom_nodes = find(wholeNodesXYZ(:,3) == min(wholeNodesXYZ(:,3)));
+bottomNodesXYZ = wholeNodesXYZ(bottom_nodes,:);
+outerDummyNodesXYZ = offsetWallNodes(wallNodesXYZ(1:sum(WallNoElem),:),...
+    wallNodesXYZ(1+sum(WallNoElem):sum(WallNoElem)*2,:),...
+    WallThick(1)/WallThickNoElem,...
+    (foundationWidth(1)-WallThick(1))/2 +(foundationWidth(1)-WallThick(1))/2/foundationOutNoElem);
+innerDummyNodesXYZ = offsetWallNodes(wallNodesXYZ(1+sum(WallNoElem)*WallThickNoElem:sum(WallNoElem)+sum(WallNoElem)*WallThickNoElem,:),...
+        wallNodesXYZ(1+sum(WallNoElem)*(WallThickNoElem-1):sum(WallNoElem)*WallThickNoElem,:),...
+        WallThick(1)/WallThickNoElem,...
+        (foundationWidth(1)-WallThick(1))/2+(foundationWidth(1)-WallThick(1))/2/foundationInNoElem);
+interNodesXYZ = [outerDummyNodesXYZ;bottomNodesXYZ;innerDummyNodesXYZ];
+
+elem2nInter = zeros((WallThickNoElem+foundationOutNoElem+foundationInNoElem+2)*...
+    sum(WallNoElem),4);
+for j= 1:foundationOutNoElem+WallThickNoElem+foundationInNoElem+2
+    for i = 1:sum(WallNoElem)
+       elem2nInter(i+(j-1)*sum(WallNoElem),1) = i+(j-1)*sum(WallNoElem);
+       elem2nInter(i+(j-1)*sum(WallNoElem),2) = i+1 + (j-1)*sum(WallNoElem);
+       elem2nInter(i+(j-1)*sum(WallNoElem),3) = i+1 + sum(WallNoElem) + (j-1)*sum(WallNoElem);
+       elem2nInter(i+(j-1)*sum(WallNoElem),4) = i + sum(WallNoElem) + (j-1)*sum(WallNoElem);
+       if i==sum(WallNoElem)
+           elem2nInter(i+(j-1)*sum(WallNoElem),1) = i + (j-1)*sum(WallNoElem);
+           elem2nInter(i+(j-1)*sum(WallNoElem),2) = 1 + (j-1)*sum(WallNoElem);
+           elem2nInter(i+(j-1)*sum(WallNoElem),3) = 1 + sum(WallNoElem) + (j-1)*sum(WallNoElem);
+           elem2nInter(i+(j-1)*sum(WallNoElem),4) = i + sum(WallNoElem) + (j-1)*sum(WallNoElem);
+       end  
+    end
+end
+
+% outerDummyCornersXYZ = offsetCurveOut(baseCornersXYZ, baseWall, (foundationWidth-WallThick)/2+(foundationWidth-WallThick)/2/foundationOutNoElem);
+% outerDummyNodesXYZ = meshOnCurve(outerDummyCornersXYZ, baseWall, WallNoElem);
+% innerDummyCornersXYZ = offsetCurveIn(baseCornersXYZ, baseWall, (foundationWidth-WallThick)/2 + WallThick +(foundationWidth-WallThick)/2/foundationInNoElem);
+% innerDummyNodesXYZ = meshOnCurve(innerDummyCornersXYZ, baseWall, WallNoElem);
+% interNodesXYZ = [outerDummyNodesXYZ;bottomNodesXYZ;innerDummyNodesXYZ];
+
+ 
+% elem2nInter = zeros((WallThickNoElem+foundationOutNoElem+foundationInNoElem+2)*...
+%     sum(WallNoElem),4);
+% for j= 1:foundationOutNoElem+WallThickNoElem+foundationInNoElem+2
+%     for i = 1:sum(WallNoElem)
+%        elem2nInter(i+(j-1)*sum(WallNoElem),1) = i+(j-1)*sum(WallNoElem);
+%        elem2nInter(i+(j-1)*sum(WallNoElem),2) = i+1 + (j-1)*sum(WallNoElem);
+%        elem2nInter(i+(j-1)*sum(WallNoElem),3) = i+1 + sum(WallNoElem) + (j-1)*sum(WallNoElem);
+%        elem2nInter(i+(j-1)*sum(WallNoElem),4) = i + sum(WallNoElem) + (j-1)*sum(WallNoElem);
+% %        elem2nFound(i+(j-1)*sum(WallNoElem),5) = i+(j-1)*sum(WallNoElem)+ size(wallNodesXYZ,1)...
+% %            + sum(WallNoElem)*(foundationInNoElem+foundationOutNoElem);
+% %        elem2nFound(i+(j-1)*sum(WallNoElem),6) = i+1 + (j-1)*sum(WallNoElem)+ size(wallNodesXYZ,1)...
+% %            + sum(WallNoElem)*(foundationInNoElem+foundationOutNoElem);
+% %        elem2nFound(i+(j-1)*sum(WallNoElem),7) = i+1 + sum(WallNoElem) + (j-1)*sum(WallNoElem)+ size(wallNodesXYZ,1)...
+% %            + sum(WallNoElem)*(foundationInNoElem+foundationOutNoElem);
+% %        elem2nFound(i+(j-1)*sum(WallNoElem),8) = i + sum(WallNoElem) + (j-1)*sum(WallNoElem)+ size(wallNodesXYZ,1)...
+% %            + sum(WallNoElem)*(foundationInNoElem+foundationOutNoElem);
+% %        if j==foundationOutNoElem
+% %            elem2nFound(i+(j-1)*sum(WallNoElem),3) = i+1;
+% %            elem2nFound(i+(j-1)*sum(WallNoElem),4) = i;
+% %            elem2nFound(i+(j-1)*sum(WallNoElem),7) = i+1 + size(wallNodesXYZ,1)...
+% %                + sum(WallNoElem)*(foundationInNoElem+foundationOutNoElem)...
+% %                + sum(WallNoElem)*foundationOutNoElem;
+% %            elem2nFound(i+(j-1)*sum(WallNoElem),8) = i + size(wallNodesXYZ,1)...
+% %                + sum(WallNoElem)*(foundationInNoElem+foundationOutNoElem)...
+% %                + sum(WallNoElem)*foundationOutNoElem;
+% %        end
+%        if i==sum(WallNoElem)
+%            elem2nInter(i+(j-1)*sum(WallNoElem),1) = i + (j-1)*sum(WallNoElem);
+%            elem2nInter(i+(j-1)*sum(WallNoElem),2) = 1 + (j-1)*sum(WallNoElem);
+%            elem2nInter(i+(j-1)*sum(WallNoElem),3) = 1 + sum(WallNoElem) + (j-1)*sum(WallNoElem);
+%            elem2nInter(i+(j-1)*sum(WallNoElem),4) = i + sum(WallNoElem) + (j-1)*sum(WallNoElem);
+% %            elem2nFound(i+(j-1)*sum(WallNoElem),5) = i + (j-1)*sum(WallNoElem)+ size(wallNodesXYZ,1)...
+% %                + sum(WallNoElem)*(foundationInNoElem+foundationOutNoElem);
+% %            elem2nFound(i+(j-1)*sum(WallNoElem),6) = 1 + (j-1)*sum(WallNoElem)+ size(wallNodesXYZ,1)...
+% %                + sum(WallNoElem)*(foundationInNoElem+foundationOutNoElem);
+% %            elem2nFound(i+(j-1)*sum(WallNoElem),7) = 1 + sum(WallNoElem) + (j-1)*sum(WallNoElem)+ size(wallNodesXYZ,1)...
+% %                + sum(WallNoElem)*(foundationInNoElem+foundationOutNoElem);
+% %            elem2nFound(i+(j-1)*sum(WallNoElem),8) = i + sum(WallNoElem) + (j-1)*sum(WallNoElem)+ size(wallNodesXYZ,1)...
+% %                + sum(WallNoElem)*(foundationInNoElem+foundationOutNoElem);
+% %            if j==foundationOutNoElem
+% %                elem2nFound(i+(j-1)*sum(WallNoElem),3) = 1;
+% %                elem2nFound(i+(j-1)*sum(WallNoElem),4) = i;
+% %                elem2nFound(i+(j-1)*sum(WallNoElem),7) = 1 + size(wallNodesXYZ,1)...
+% %                    + sum(WallNoElem)*(foundationInNoElem+foundationOutNoElem)...
+% %                    + sum(WallNoElem)*foundationOutNoElem;
+% %                elem2nFound(i+(j-1)*sum(WallNoElem),8) = i + size(wallNodesXYZ,1)...
+% %                    + sum(WallNoElem)*(foundationInNoElem+foundationOutNoElem)...
+% %                    + sum(WallNoElem)*foundationOutNoElem;
+% %            end
+%        end  
+%     end
+% end
+PlotMesh(interNodesXYZ(:,1:2), elem2nInter, 0)
+interNodesXYZ(:,3) = 0;
+%
 
 
 %% Save
-
-timeString = datestr(datetime('now'),30);
-timberElemIndex = [1 1];
-title = strcat('demo_mat_',timeString,'.mat');
-save(title,'wholeNodesXYZ','wholeElem2n', 'timberElemIndex')
+% 
+% timeString = datestr(datetime('now'),30);
+% timberElemIndex = [1 1];
+% title = strcat('demo_mat_',timeString,'.mat');
+% save(title,'wholeNodesXYZ','wholeElem2n','interNodesXYZ','elem2nInter', 'timberElemIndex')

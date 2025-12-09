@@ -1,6 +1,6 @@
 clear
 close all
-load('../Examples/3DBearingWalls/input/burd_mat_20250901T162943.mat')
+load('../Examples/3DBearingWalls/input/demo_mat_20251105T121630.mat')
 % If using Burd 2022 or Yiu 2019 FEM simulated greenfield displacement
 % Yiu_GF = load('../Examples/3DBearingWalls/input/Yiu_GF.mat');
 % Yiu_GF = Yiu_GF.Yiu_GF;
@@ -10,19 +10,19 @@ interNodesXYZ(:,3) = 0;
 
 
 %------ Deep Excavation Required Input
-L_x            = 9.5;     % half-length of station in x (example; use your value)
-building_offset = 11;   % distance from the wall face to the building line
-y_build_center  = 0.0;    % change if the building is not centered in y
-
-% Shift the *entire* building (all nodes, including interface nodes):
-x_shift = (2*L_x + building_offset);
-y_shift = y_build_center;
-
-wholeNodesXYZ(:,1) = wholeNodesXYZ(:,1) + x_shift;
-wholeNodesXYZ(:,2) = wholeNodesXYZ(:,2) + y_shift;
-
-interNodesXYZ(:,1) = interNodesXYZ(:,1) + x_shift;
-interNodesXYZ(:,2) = interNodesXYZ(:,2) + y_shift;
+% L_x            = 9.5;     % half-length of station in x (example; use your value)
+% building_offset = 11;   % distance from the wall face to the building line
+% y_build_center  = 0.0;    % change if the building is not centered in y
+% 
+% % Shift the *entire* building (all nodes, including interface nodes):
+% x_shift = (2*L_x + building_offset);
+% y_shift = y_build_center;
+% 
+% wholeNodesXYZ(:,1) = wholeNodesXYZ(:,1) + x_shift;
+% wholeNodesXYZ(:,2) = wholeNodesXYZ(:,2) + y_shift;
+% 
+% interNodesXYZ(:,1) = interNodesXYZ(:,1) + x_shift;
+% interNodesXYZ(:,2) = interNodesXYZ(:,2) + y_shift;
 %------------------------------------------------
 
 PlotMesh(wholeNodesXYZ, wholeElem2n, 0)
@@ -54,9 +54,10 @@ timber_E = masonry_E;
 timber_nu = 0.2;
 timber_G = timber_E/2/(1+timber_nu);
 timber_rho = masonry_rho;
-nus = 0.2;
-Gs = 6000000;
-Es = Gs*2*(1+nus);
+nus = 0.3;
+Gs = 676000000; %Not Used
+%Es = Gs*2*(1+nus);
+Es = 175000000; %Es from ML
 mu = 0.3;
 %%
 NoOfElem = size(wholeElem2n,1);
@@ -86,12 +87,12 @@ openQ = Q(newNodeDOF);
 %         tunnel_ys, tunnel_yf, tunnel_d, find(z(newNode)==min(z(newNode))));
 
 paramsGF = struct( ...
-    'nu',0.499,'Hw',19,'L_x',9.5,'L_y',32, ...
-    'switch_shape',5,'C1',0,'C2',1,'C3',0, ...
-    'beta_CCS_wall_1',7.5e-4,'beta_CCS_wall_2',7.5e-4, ...
-    'beta_CCS_wall_3',7.5e-4,'beta_CCS_wall_4',7.5e-4, ...
+    'nu',0.499,'Hw',14,'L_x',10.9,'L_y',34.6, ...
+    'switch_shape',50,'C1',0.34,'C2',0.18,'C3',0.48, ...
+    'beta_CCS_wall_1',0.0011,'beta_CCS_wall_2',0.0011, ...
+    'beta_CCS_wall_3',0.0011,'beta_CCS_wall_4',0.0011, ...
     'delta_z_cavities',19/19,'delta_xyperimeter_cavities',2.5, ...
-    'switch_outputlocation',100, ...                % <— new mode
+    'switch_outputlocation',100, ...                
     'x_nodes', x(newNode)', 'y_nodes', y(newNode)', 'z_nodes', z(newNode)' );
 
 outGF = run_greenfield_3D_DMM(paramsGF);           % run at node cloud
@@ -797,3 +798,6 @@ PlotFieldonDefoMesh([x', y', z'], wholeElem2n(wallElemInd,:),10, [u_s(1:3:end),u
 daspect([1 1 1])
 % disp({'dv at corner 1 to 4: ', u_bottom(18*3), u_bottom(33*3), u_bottom(49*3), u_bottom(64*3)})
 % disp({'dv total at corner 1 to 4: ', u_bottom_final(18*3), u_bottom_final(33*3), u_bottom_final(49*3), u_bottom_final(64*3)})
+
+
+%save('demo1_kk_front.mat')

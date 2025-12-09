@@ -24,12 +24,12 @@ import time
 input_dir = "./input"
 output_dir = "./output"
 # mesh_file = os.path.join(input_dir, "burd_mat_20250901T162943.mat")
-mesh_file = os.path.join(input_dir, "demo_mat_20251104T143806.mat") # One Wall
+mesh_file = os.path.join(input_dir, "kk_0811220251203T085216.mat") # KK Building
 #mesh_file = os.path.join(input_dir, "burd_mat_rotated_20251016T134538.mat") 
 mesh_data = loadmat(mesh_file)
 
 mesh_data['wholeElem2n'] = mesh_data['wholeElem2n'] - 1  # convert to zero-based index
-#mesh_data['elem2nInter'] = mesh_data['elem2nInter'] - 1  # convert to zero-based index
+mesh_data['elem2nInter'] = mesh_data['elem2nInter'] - 1  # convert to zero-based index
 
 # Define building properties
 Eb = 3e9  # Young's modulus of the building (Pa)
@@ -37,9 +37,12 @@ nu = 0.2  # Poisson's ratio of the building
 rho = 23.75*10**3  # Density of the building (N/m^3) burd et al. 2022 table 1
 
 # Define soil properties
+# table 12 CR-CMT-STA=Kk-CP=RWA=SEC-DES-REP-000101_2.0
 Gs = 6e6  # Shear modulus of the soil (Pa)
-nus = 0.2 # Poisson's ratio of the soil
-EsNominal = 2*Gs*(1+nus) # Nominal Young's modulus of the soil (Pa)
+nus = 0.3 # Poisson's ratio of the soil
+#EsNominal = 2*Gs*(1+nus) # Nominal Young's modulus of the soil (Pa)
+EsNominal = 175e6  # Elastic Young's modulus (Pa) ML from STR Report 3MPa for the Fill.
+
 
 # Define interface properties
 mu_int = 0.3 # friction coefficient of the interface
@@ -48,9 +51,9 @@ lim_c_int = -347.8261*1000 # compressive strength of the interface (Pa). It must
 
 # The current soil flexibility model only works for ground surface loading. Normalize Z so ground = 0
 mesh_data['wholeNodesXYZ'][:, 2] = mesh_data['wholeNodesXYZ'][:, 2] - np.min(mesh_data['wholeNodesXYZ'][:, 2])
-#mesh_data['interNodesXYZ'][:, 2] = 0.0
+mesh_data['interNodesXYZ'][:, 2] = 0.0
 
-# Apply building offset
+""""
 L_x = 10.9 # width of station box
 building_offset = 5.0 # distance from rw to building edge
 y_building = 0 # y location of the building
@@ -60,8 +63,9 @@ y_shift = y_building
 
 mesh_data['wholeNodesXYZ'][:, 0] += x_shift
 mesh_data['wholeNodesXYZ'][:, 1] += y_shift
-#mesh_data['interNodesXYZ'][:, 0] += x_shift
-#mesh_data['interNodesXYZ'][:, 1] += y_shift
+mesh_data['interNodesXYZ'][:, 0] += x_shift
+mesh_data['interNodesXYZ'][:, 1] += y_shift
+"""
 
 # --- Extract ground nodes ---
 wholeNodesXYZ = mesh_data['wholeNodesXYZ']  # (N, 3) array
@@ -114,8 +118,8 @@ print("Greenfield ground displacements saved to 'greenfield_ground_disp_singlewa
 model_el = ASREp.ASRE_3D_solid_model(
     mesh_data['wholeNodesXYZ'],
     mesh_data['wholeElem2n'],
-    #mesh_data['interNodesXYZ'],
-    #mesh_data['elem2nInter'],
+    mesh_data['interNodesXYZ'],
+    mesh_data['elem2nInter'],
     solver = 'elastic'
 )
 model_el.set_building_properties(
@@ -153,8 +157,8 @@ print("Elastic model results saved to 'model_el.pkl'.")
 model_ep = ASREp.ASRE_3D_solid_model(
     mesh_data['wholeNodesXYZ'],
     mesh_data['wholeElem2n'],
-    #mesh_data['interNodesXYZ'],
-    #mesh_data['elem2nInter'],
+    mesh_data['interNodesXYZ'],
+    mesh_data['elem2nInter'],
     solver = 'elasto-plastic'
 )
 model_ep.set_building_properties(
