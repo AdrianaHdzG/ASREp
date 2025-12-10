@@ -126,7 +126,7 @@ def _long_mu(s_vec, Lwall, Hw, He_Hwratio):
     s = np.asarray(s_vec).reshape(1, -1)
     # width from Mu & Huang (kept as in your MATLAB)
     W = (Lwall/2.0) * (0.069*np.log((Hw/He_Hwratio)/Lwall) + 1.03)
-    W = max(W, 0.05*Lwall)
+    #W = max(W, 0.05*Lwall)
     return np.exp(-np.pi * (s / W) ** 2)
 
 
@@ -160,6 +160,7 @@ def _eq_shaft_3d_af(x, y, z, h, nu, a):
     u_y = -coeff * fy
     u_z =  coeff * fz
     return u_x, u_y, u_z
+
 # Helper functions for DMM-based 3D greenfield model
 def run_greenfield_3D_cloud_xyz(
     x, y, z, *,
@@ -178,6 +179,7 @@ def run_greenfield_3D_cloud_xyz(
     switch_solution_type=3,
     # zero-out inside box footprint? (greenfield outside only)
     zero_inside_box=True,
+    debug=False,
 ):
     """
     DMM-based 3D greenfield at arbitrary (x,y,z) points.
@@ -185,6 +187,18 @@ def run_greenfield_3D_cloud_xyz(
     Requires helper funcs in this module: _depth_parabolic, _depth_dmm, _long_none,
     _long_mu, _long_roboski, _eq_shaft_3d_af.
     """
+    if debug:
+        print("\n===== DEBUG: run_greenfield_3D_cloud_xyz =====")
+        print(f"Hw={Hw}, L_x={L_x}, L_y={L_y}, He_Hwratio={He_Hwratio}")
+        print(f"nu={nu}")
+        print(f"switch_shape={switch_shape}, switch_solution_type={switch_solution_type}")
+        print(f"C1={C1}, C2={C2}, C3={C3}")
+        print("betas:",
+              beta_CCS_wall_1, beta_CCS_wall_2,
+              beta_CCS_wall_3, beta_CCS_wall_4)
+        print(f"delta_z_cavities={delta_z_cavities}, "
+              f"delta_xyperimeter_cavities={delta_xyperimeter_cavities}")
+   
     x = np.asarray(x, dtype=float).ravel()
     y = np.asarray(y, dtype=float).ravel()
     z = np.asarray(z, dtype=float).ravel()
@@ -239,10 +253,16 @@ def run_greenfield_3D_cloud_xyz(
     Lwall_1 = 2*L_x;  Lwall_2 = 2*L_y;  Lwall_3 = 2*L_x;  Lwall_4 = 2*L_y
 
     # vertical discretization (cavity mid-depths)
-    z_wall_discr = np.arange(0.0, Hw + delta_z_cavities, delta_z_cavities)
-    if z_wall_discr.size < 2:
-        z_wall_discr = np.array([0.0, Hw], dtype=float)
+    Nlayers = max(1, int(round(Hw / delta_z_cavities)))
+    delta_z_cavities = Hw / Nlayers  # adjust to fit exactly
+    z_wall_discr = np.linspace(0.0, Hw, Nlayers + 1)
     z_cav = 0.5 * (z_wall_discr[:-1] + z_wall_discr[1:])
+    Nd = z_cav.size
+
+    if debug:
+        print(f"Nlayers={Nlayers}, final delta_z_cavities={delta_z_cavities}")
+        print("z_wall_discr (first few):", z_wall_discr[:5])
+        print("z_cav (first few):", z_cav[:5])
 
     # amplitude matrix: depth × longitudinal along each wall
     delta_cav = depth_fun(z_cav.reshape(-1, 1))  # Nd×1
@@ -256,6 +276,21 @@ def run_greenfield_3D_cloud_xyz(
     A3 = beta_CCS_wall_3 * (delta_cav @ R3)  # Nd×n1
     A4 = beta_CCS_wall_4 * (delta_cav @ R4)  # Nd×n2
     A = np.concatenate([A1, A2, A3, A4], axis=1)     # Nd×Ns
+    
+    if debug:
+        # Integrate along depth to approximate "volume loss per run meter"
+        VLW_w1_py = np.trapezoid(A1, z_cav, axis=0)   # length n1
+        VLW_w2_py = np.trapezoid(A2, z_cav, axis=0)   # length n2
+        VLW_w3_py = np.trapezoid(A3, z_cav, axis=0)
+        VLW_w4_py = np.trapezoid(A4, z_cav, axis=0)
+
+        beta_run_w1_py = VLW_w1_py / (Hw**2)
+        beta_run_w2_py = VLW_w2_py / (Hw**2)
+        beta_run_w3_py = VLW_w3_py / (Hw**2)
+        beta_run_w4_py = VLW_w4_py / (Hw**2)
+
+        print("beta_runmeter_wall_2 (Python, first 5):",
+              beta_run_w2_py[:5])
 
     # symmetry factor & segment lengths
     if switch_solution_type == 1:
@@ -276,15 +311,35 @@ def run_greenfield_3D_cloud_xyz(
 
     Nd, Ns = A.shape
     vol_elem = m_sym * A * (delta_z_cavities * seg_len)    # Nd×Ns
-    vol_elem = np.maximum(vol_elem, 0.0)
-    a_cavity = ((3.0 / (4.0*np.pi)) * vol_elem) ** (1.0/3.0)  # Nd×Ns
+    X = (3.0 / (4.0*np.pi)) * vol_elem # Allow for negative volumes to be passed through
+    a_cavity = np.sign(X) * np.abs(X) ** (1.0 / 3.0) 
+
+    #vol_elem = np.maximum(vol_elem, 0.0)
+    #a_cavity = ((3.0 / (4.0*np.pi)) * vol_elem) ** (1.0/3.0)  # Nd×Ns
+
+    if debug:
+        print("vol_elem min/max:", float(vol_elem.min()), float(vol_elem.max()))
+        print("a_cavity min/max:", float(a_cavity.min()), float(a_cavity.max()))
 
     # per-point tapers for semi-analytical option (type 3)
     if switch_solution_type == 3:
-        F1 = np.maximum(0.0, 0.5 - 0.5*(y / L_y))  # 1 at y=-Ly → 0 at y=+Ly
-        F2 = np.maximum(0.0, 0.5 + 0.5*(x / L_x))  # 1 at x=+Lx → 0 at x=-Lx
-        F3 = np.maximum(0.0, 0.5 + 0.5*(y / L_y))  # 1 at y=+Ly → 0 at y=-Ly
-        F4 = np.maximum(0.0, 0.5 - 0.5*(x / L_x))  # 1 at x=-Lx → 0 at x=+Lx
+        F1  = np.ones(Np, dtype=float)
+        F2  = np.ones(Np, dtype=float)
+        F3  = np.ones(Np, dtype=float)
+        F4  = np.ones(Np, dtype=float)
+
+        # W1 (bottom, Y=-Ly): 1 at Y=-Ly → 0 at Y=+Ly, only for y >= -Ly
+        mask_w1 = (y >= -L_y)
+        F1[mask_w1] = np.maximum(0.0, 0.5 - 0.5*(y[mask_w1] / L_y))  # 1 at y=-Ly → 0 at y=+Ly
+        # W2 (right, X=+Lx): 1 at X=+Lx → 0 at X=-Lx, only for x <= +Lx
+        mask_w2 = (x <= L_x)
+        F2[mask_w2] = np.maximum(0.0, 0.5 + 0.5*(x[mask_w2] / L_x))  # 1 at x=+Lx → 0 at x=-Lx
+        # W3 (top, Y=+Ly): 1 at Y=+Ly → 0 at Y=-Ly, only for y <= +Ly
+        mask_w3 = (y <= L_y)
+        F3[mask_w3] = np.maximum(0.0, 0.5 + 0.5*(y[mask_w3] / L_y))  # 1 at y=+Ly → 0 at y=-Ly
+        # W4 (left, X=-Lx): 1 at X=-Lx
+        mask_w4 = (x >= -L_x)
+        F4[mask_w4] = np.maximum(0.0, 0.5 - 0.5*(x[mask_w4] / L_x))  # 1 at x=-Lx → 0 at x=+Lx
     else:
         F1 = F2 = F3 = F4 = np.ones(Np)
 
@@ -305,8 +360,282 @@ def run_greenfield_3D_cloud_xyz(
             zloc = z
             for i in range(Nd):
                 a = a_cavity[i, j]
-                if a <= 0.0:
-                    continue
+                #if a <= 0.0: Allow for negative cavities
+                 #   continue
+                h = z_cav[i]
+                ux, uy, uz = _eq_shaft_3d_af(xloc, yloc, zloc, h, nu, a)
+                ux_all += Fw * ux
+                uy_all += Fw * uy
+                uz_all += Fw * uz
+
+    if zero_inside_box:
+        inside = (x >= -L_x) & (x <= L_x) & (np.abs(y) <= L_y)
+        ux_all[inside] = 0.0
+        uy_all[inside] = 0.0
+        uz_all[inside] = 0.0
+
+    return (np.ascontiguousarray(ux_all, dtype=np.float64),
+            np.ascontiguousarray(uy_all, dtype=np.float64),
+            np.ascontiguousarray(uz_all, dtype=np.float64))
+
+
+# Approach 2 for C1 C2 and C3 variation along the walls
+
+def run_greenfield_3D_cloud_xyz_approach2(
+        x,y,z, *,
+        # geometry of the rectangular box (station half-lengths)
+        Hw=19.0, L_x=9.5, L_y=32.0, He_Hwratio=1.0,
+        # soil
+        nu=0.499,
+        # wall deflection shape (DMM + Mu/Roboski)
+        switch_shape = 50,
+        # equivalent-cavity amplitude per wall (beta at centre line)
+        beta_CCS_wall_1=0.075/100, beta_CCS_wall_2=0.075/100,
+        beta_CCS_wall_3=0.075/100, beta_CCS_wall_4=0.075/100,
+
+        #Discretization
+        delta_z_cavities=1.0, delta_xyperimeter_cavities=2.5,
+        # superposition type: 1=single wall mirrored, 2=four walls analytical, 3=four walls semi-analytical (with tapers)
+        switch_solution_type=3,
+        # zero-out inside box footprint? (greenfield outside only)
+        zero_inside_box=True,
+        # Anchor Inputs for Approach 2
+        y_anchor_long = None, 
+        x_anchor_short = None, 
+        C1_anchor_w1 = None, C2_anchor_w1 = None, C3_anchor_w1 = None,
+        C1_anchor_w2 = None, C2_anchor_w2 = None, C3_anchor_w2 = None,
+        C1_anchor_w3 = None, C2_anchor_w3 = None, C3_anchor_w3 = None,
+        C1_anchor_w4 = None, C2_anchor_w4 = None, C3_anchor_w4 = None,
+):
+    
+    """
+    DMM-based 3D greenfield at arbitrary (x,y,z) points.
+    C1, C2 C2 variation along the walls based on user defined anchor points.
+    -Same geometry as run_greenfield_3D_cloud_xyz
+    - switch_shape must be:
+        50 : DMM + Mu
+        51 : DMM + Roboski
+    - C1, C2 and C3 along each wall are defined by anchor points and linearly interpolated to the cavity midpoints on each wall. 
+    Returns u_x, u_y, u_z arrays.
+    """
+
+    # -- Basic checks and input shapes ---
+    x = np.asarray(x, dtype=float).ravel()
+    y = np.asarray(y, dtype=float).ravel()
+    z = np.asarray(z, dtype=float).ravel()
+    if not (x.shape == y.shape == z.shape):
+        raise ValueError("x, y, z must have the same shape.")
+    Np = x.size
+
+    # -- Restrict to DMM + Mu/Roboski ---
+    if switch_shape == 50:
+        long_fun = _long_mu
+    elif switch_shape == 51:
+        long_fun = _long_roboski
+    else:
+        raise ValueError("For Approach 2 (run_greenfield_3D_cloud_xyz_approach2) currently supports switch_shape= 50 (Mu) or 51 (Roboski).")
+    
+    Lwall_1 = 2*L_x
+    Lwall_2 = 2*L_y
+    Lwall_3 = 2*L_x
+    Lwall_4 = 2*L_y
+
+    # -- Default for anchor positions ---
+
+    if y_anchor_long is None:
+        y_anchor_long = np.array(
+            [0.0, 0.25*Lwall_2, 0.5*Lwall_2, 0.75*Lwall_2, Lwall_2]
+            )
+    else:
+        y_anchor_long = np.asarray(y_anchor_long, dtype=float)
+
+    if x_anchor_short is None:
+        x_anchor_short = np.array(
+            [0.0,  0.5*Lwall_1,  Lwall_1]
+            )
+    else:
+        x_anchor_short = np.asarray(x_anchor_short, dtype=float)
+
+    # helper for default anchors
+    def _default(arr,fallback):
+        return np.asarray(arr, dtype=float) if arr is not None else np.asarray(fallback, dtype=float)
+    
+    # -- Default Values for C1, C2, C3 anchors (correspond to KK) ---
+    C1_anchor_w2 = _default(C1_anchor_w2, [0.33, -0.5, 0.3439, 0.26, 0.33])
+    C2_anchor_w2 = _default(C2_anchor_w2, [0.33,  0.26, 0.1769, -0.09, 0.33])
+    C3_anchor_w2 = _default(C3_anchor_w2, [0.34,  1.24, 0.4792,  0.83, 0.34])
+
+    C1_anchor_w4 = _default(C1_anchor_w4, [0.33, -0.5, 0.3439, 0.26, 0.33])
+    C2_anchor_w4 = _default(C2_anchor_w4, [0.33,  0.26, 0.1769, -0.09, 0.33])
+    C3_anchor_w4 = _default(C3_anchor_w4, [0.34,  1.24, 0.4792,  0.83, 0.34])
+
+    C1_anchor_w1 = _default(C1_anchor_w1, [0.33, 0.40, 0.33])
+    C2_anchor_w1 = _default(C2_anchor_w1, [0.33, 0.20, 0.33])
+    C3_anchor_w1 = _default(C3_anchor_w1, [0.34, 0.40, 0.34])
+
+    C1_anchor_w3 = _default(C1_anchor_w3, [0.33, 0.40, 0.33])
+    C2_anchor_w3 = _default(C2_anchor_w3, [0.33, 0.20, 0.33])
+    C3_anchor_w3 = _default(C3_anchor_w3, [0.34, 0.40, 0.34])
+
+    # -- Vertical Discretization in z ---
+    z_wall_discr = np.arange(0.0, Hw + delta_z_cavities, delta_z_cavities)
+    if z_wall_discr.size < 2:
+        z_wall_discr = np.array([0.0, Hw], dtype=float)
+    z_cav = 0.5 * (z_wall_discr[:-1] + z_wall_discr[1:])
+    Nd_c = z_cav.size
+
+    # -- Perimeter discretization (four walls) ---
+    n1 = max(1, int(round(2*L_x / delta_xyperimeter_cavities)))
+    n2 = max(1, int(round(2*L_y / delta_xyperimeter_cavities)))
+    dx1 = (2*L_x) / n1
+    dx2 = (2*L_y) / n2
+    # wall midpoints
+    xmid_w1 = np.linspace(-L_x + dx1/2,  L_x - dx1/2, n1); ymid_w1 = -L_y*np.ones(n1)
+    ymid_w2 = np.linspace(-L_y + dx2/2,  L_y - dx2/2, n2); xmid_w2 =  L_x*np.ones(n2)
+    xmid_w3 = np.linspace( L_x - dx1/2, -L_x + dx1/2, n1); ymid_w3 =  L_y*np.ones(n1)
+    ymid_w4 = np.linspace( L_y - dx2/2, -L_y + dx2/2, n2); xmid_w4 = -L_x*np.ones(n2)
+
+    Xc_vec = np.concatenate([xmid_w1, xmid_w2, xmid_w3, xmid_w4])
+    Yc_vec = np.concatenate([ymid_w1, ymid_w2, ymid_w3, ymid_w4])
+    idx_w1 = np.arange(0, n1)
+    idx_w2 = np.arange(n1, n1+n2)
+    idx_w3 = np.arange(n1+n2, 2*n1+n2)
+    idx_w4 = np.arange(2*n1+n2, 2*n1+2*n2)
+
+    Ns = Xc_vec.size # total number of perimeter segments/stacks
+
+    # -- Along wall coordinates --
+
+    s_w1 = xmid_w1  # [-Lx+dx/2, ..., Lx-dx/2]
+    s_w2 = ymid_w2  # [-Ly+dy/2, ..., Ly-dy/2]
+    s_w3 = xmid_w3  # [Lx-dx/2, ..., -Lx+dx/2]
+    s_w4 = ymid_w4  # [Ly-dy/2, ..., -Ly+dy/2]
+
+    # -- Longitudinal reduction R1, R2, R3 and R4 --
+    R1 = long_fun(s_w1, Lwall_1, Hw, He_Hwratio)  # 1×n1
+    R2 = long_fun(s_w2, Lwall_2, Hw, He_Hwratio)  # 1×n2
+    R3 = long_fun(s_w3, Lwall_3, Hw, He_Hwratio)  # 1×n1
+    R4 = long_fun(s_w4, Lwall_4, Hw, He_Hwratio)  # 1×n2
+
+    # reshape to 1D arrays for interpolation
+
+    R1 = R1.reshape(-1)
+    R2 = R2.reshape(-1)
+    R3 = R3.reshape(-1)
+    R4 = R4.reshape(-1)
+
+    # -- Interpolate C1, C2, C3 along each wall to cavity midpoints --
+    # Long walls: s + L_y → [0, 2L_y]; Short walls: s + L_x → [0, 2L_x]
+    C1_prof_w2 = np.interp(s_w2 + L_y, y_anchor_long, C1_anchor_w2)
+    C2_prof_w2 = np.interp(s_w2 + L_y, y_anchor_long, C2_anchor_w2)
+    C3_prof_w2 = np.interp(s_w2 + L_y, y_anchor_long, C3_anchor_w2)
+
+    C1_prof_w4 = np.interp(s_w4 + L_y, y_anchor_long, C1_anchor_w4)
+    C2_prof_w4 = np.interp(s_w4 + L_y, y_anchor_long, C2_anchor_w4)
+    C3_prof_w4 = np.interp(s_w4 + L_y, y_anchor_long, C3_anchor_w4)
+
+    C1_prof_w1 = np.interp(s_w1 + L_x, x_anchor_short, C1_anchor_w1)
+    C2_prof_w1 = np.interp(s_w1 + L_x, x_anchor_short, C2_anchor_w1)
+    C3_prof_w1 = np.interp(s_w1 + L_x, x_anchor_short, C3_anchor_w1)
+
+    C1_prof_w3 = np.interp(s_w3 + L_x, x_anchor_short, C1_anchor_w3)
+    C2_prof_w3 = np.interp(s_w3 + L_x, x_anchor_short, C2_anchor_w3)
+    C3_prof_w3 = np.interp(s_w3 + L_x, x_anchor_short, C3_anchor_w3)
+
+    # -- Build delta_cavity for all walls --
+
+    Delta_cav_all = np.zeros((Nd_c, Ns), dtype=float)
+
+    # Wall 1
+
+    for j, j_global in enumerate(idx_w1):
+        delta_cav_j = _depth_dmm(z_cav, Hw, C1_prof_w1[j], C2_prof_w1[j], C3_prof_w1[j]).reshape(-1)
+        Delta_cav_all[:, j_global] = (beta_CCS_wall_1 * R1[j]) * delta_cav_j
+
+    # Wall 2
+
+    for j, j_global in enumerate(idx_w2):
+        jj = j  # local index for wall 2
+        delta_cav_j = _depth_dmm(z_cav, Hw, C1_prof_w2[jj], C2_prof_w2[jj], C3_prof_w2[jj]).reshape(-1)
+        Delta_cav_all[:, j_global] = (beta_CCS_wall_2 * R2[jj]) * delta_cav_j
+
+    # Wall 3
+    for j, j_global in enumerate(idx_w3):
+        jj = j  # local index for wall 3
+        delta_cav_j = _depth_dmm(z_cav, Hw, C1_prof_w3[jj], C2_prof_w3[jj], C3_prof_w3[jj]).reshape(-1)
+        Delta_cav_all[:, j_global] = (beta_CCS_wall_3 * R3[jj]) * delta_cav_j
+
+    # Wall 4
+    for j, j_global in enumerate(idx_w4):
+        jj = j  # local index for wall 4
+        delta_cav_j = _depth_dmm(z_cav, Hw, C1_prof_w4[jj], C2_prof_w4[jj], C3_prof_w4[jj]).reshape(-1)
+        Delta_cav_all[:, j_global] = (beta_CCS_wall_4 * R4[jj]) * delta_cav_j
+     
+    # -- Symmetry factor & segment lengths --
+    if switch_solution_type == 1:
+        m_sym = 2.0
+    elif switch_solution_type == 2:
+        m_sym = 1.0
+    elif switch_solution_type == 3:
+        m_sym = 2.0
+    else:
+        raise ValueError("switch_solution_type must be 1, 2, or 3")
+    
+    seg_len = np.concatenate([
+        np.full(n1, dx1),
+        np.full(n2, dx2),
+        np.full(n1, dx1),
+        np.full(n2, dx2),
+    ])
+
+    # -- Volume element and equivalent cavity radius (Allow for negative cavities) --
+
+    vol_elem = m_sym * Delta_cav_all * (delta_z_cavities * seg_len)     # Nd×Ns
+    Xvol = (3.0 / (4.0*np.pi)) * vol_elem
+    a_cavity = np.sign(Xvol) * np.abs(Xvol) ** (1.0 / 3.0)  # Nd×Ns
+
+    # -- Per-point tapers for semi-analytical option (type 3) --
+    if switch_solution_type == 3:
+        F1  = np.ones(Np, dtype=float)
+        F2  = np.ones(Np, dtype=float)
+        F3  = np.ones(Np, dtype=float)
+        F4  = np.ones(Np, dtype=float)
+
+        # W1 (bottom, Y=-Ly): 1 at Y=-Ly → 0 at Y=+Ly, only for y >= -Ly
+        mask_w1 = (y >= -L_y)
+        F1[mask_w1] = np.maximum(0.0, 0.5 - 0.5*(y[mask_w1] / L_y))  # 1 at y=-Ly → 0 at y=+Ly
+        # W2 (right, X=+Lx): 1 at X=+Lx → 0 at X=-Lx, only for x <= +Lx
+        mask_w2 = (x <= L_x)
+        F2[mask_w2] = np.maximum(0.0, 0.5 + 0.5*(x[mask_w2] / L_x))  # 1 at x=+Lx → 0 at x=-Lx
+        # W3 (top, Y=+Ly): 1 at Y=+Ly → 0 at Y=-Ly, only for y <= +Ly
+        mask_w3 = (y <= L_y)
+        F3[mask_w3] = np.maximum(0.0, 0.5 + 0.5*(y[mask_w3] / L_y))  # 1 at y=+Ly → 0 at y=-Ly
+        # W4 (left, X=-Lx): 1 at X=-Lx
+        mask_w4 = (x >= -L_x)
+        F4[mask_w4] = np.maximum(0.0, 0.5 - 0.5*(x[mask_w4] / L_x))  # 1 at x=-Lx → 0 at x=+Lx
+        
+    else:
+        F1 = F2 = F3 = F4 = np.ones(Np)
+
+    # -- Accumulate contributions --
+    ux_all = np.zeros(Np, dtype=float)
+    uy_all = np.zeros(Np, dtype=float)
+    uz_all = np.zeros(Np, dtype=float)
+
+    index_sets = [idx_w1, idx_w2, idx_w3, idx_w4]
+    F_map = {1: F1, 2: F2, 3: F3, 4: F4}
+
+    for w, idxs in enumerate(index_sets, start=1):
+        Fw = F_map[w]
+        for j in idxs:
+            dxj = Xc_vec[j]; dyj = Yc_vec[j]
+            xloc = x - dxj
+            yloc = y - dyj
+            zloc = z
+            for i in range(Nd_c):
+                a = a_cavity[i, j]
+                #if a <= 0.0: Allow for negative cavities
+                 #   continue
                 h = z_cav[i]
                 ux, uy, uz = _eq_shaft_3d_af(xloc, yloc, zloc, h, nu, a)
                 ux_all += Fw * ux
