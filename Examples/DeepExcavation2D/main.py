@@ -7,7 +7,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))               # Input.py
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 '..', '..'))                                   # ASREp package
-
+sys.path.insert(0, r"C:\ASREp")
 from Input import *
 from ASREp.ground_deformation_models import wall_deflection
 from ASREp.ASRE_Timoshenko_model import ASRE_Timoshenko_model
@@ -95,7 +95,7 @@ damage_category, max_eps_t_ssi = model.categorize_damage()
 
 print(f'  Max tensile strain (SSI) : {max_eps_t_ssi:.4f} %')
 print(f'  Damage category (SSI)    : {damage_category}  '
-      f'(0=negligible → 5=very severe)')
+      f'(0=negligible -> 5=very severe)')
 
 # %% SUMMARY
 print('\n========== SUMMARY ==========')
@@ -106,3 +106,19 @@ print(f'  Max wall deflection      : {max_wall_defl * 1000:.2f} mm')
 print(f'  GF  max tensile strain   : {max_eps_t_gf * 100:.4f} %')
 print(f'  SSI max tensile strain   : {max_eps_t_ssi:.4f} %')
 print(f'  Damage category (SSI)    : {damage_category}')
+
+
+# --------------------------------------------------
+# quoFEM output
+# --------------------------------------------------
+
+with open("results.out", "w") as f:
+    f.write(
+        "{} {} {}".format(
+            max_eps_t_gf,
+            max_eps_t_ssi,
+            damage_category
+        )
+    )
+
+print("results.out written successfully")
