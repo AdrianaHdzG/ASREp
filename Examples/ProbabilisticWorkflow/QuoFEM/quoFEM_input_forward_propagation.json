@@ -1,0 +1,142 @@
+{
+    "Applications": {
+        "FEM": {
+            "Application": "OpenSeesPy",
+            "ApplicationData": {
+                "MS_Path": "{Current_Dir}/.",
+                "PA_Path": "{Current_Dir}/.",
+                "mainScript": "main.py",
+                "parametersScript": "params.py",
+                "postprocessScript": ""
+            }
+        },
+        "UQ": {
+            "Application": "Dakota-UQ",
+            "ApplicationData": {
+            }
+        }
+    },
+    "EDP": [
+        {
+            "length": 1,
+            "name": "max_tensile_strain",
+            "type": "scalar"
+        }
+    ],
+    "FEM": {
+    },
+    "UQ": {
+        "parallelExecution": true,
+        "samplingMethodData": {
+            "method": "LHS",
+            "samples": 100,
+            "seed": 949
+        },
+        "saveWorkDir": true,
+        "uqType": "Forward Propagation"
+    },
+    "correlationMatrix": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1
+    ],
+    "localAppDir": "",
+    "randomVariables": [
+        {
+            "distribution": "Normal",
+            "inputType": "Parameters",
+            "mean": 0.01,
+            "name": "vlt",
+            "refCount": 1,
+            "stdDev": 0.004,
+            "value": "RV.vlt",
+            "variableClass": "Uncertain"
+        },
+        {
+            "distribution": "Normal",
+            "inputType": "Parameters",
+            "mean": 0.5,
+            "name": "Kt",
+            "refCount": 1,
+            "stdDev": 0.077,
+            "value": "RV.Kt",
+            "variableClass": "Uncertain"
+        },
+        {
+            "distribution": "Normal",
+            "inputType": "Parameters",
+            "mean": 1000000000,
+            "name": "Eb",
+            "refCount": 1,
+            "stdDev": 356000000,
+            "value": "RV.Eb",
+            "variableClass": "Uncertain"
+        },
+        {
+            "distribution": "Normal",
+            "inputType": "Parameters",
+            "mean": 0.3,
+            "name": "nu_b",
+            "refCount": 1,
+            "stdDev": 0.027,
+            "value": "RV.nu_b",
+            "variableClass": "Uncertain"
+        },
+        {
+            "distribution": "Normal",
+            "inputType": "Parameters",
+            "mean": 100000000,
+            "name": "Es",
+            "refCount": 1,
+            "stdDev": 41000000,
+            "value": "RV.Es",
+            "variableClass": "Uncertain"
+        }
+    ],
+    "remoteAppDir": "",
+    "resultType": "SimCenterUQResultsSampling",
+    "runType": "runningLocal",
+    "spreadsheet": {
+        "data": [],
+        "headings": [
+            "Run #",
+            "vlt",
+            "Kt",
+            "Eb",
+            "nu_b",
+            "Es",
+            "max_tensile_strain",
+            ""
+        ],
+        "isSurrogate": false,
+        "nrv": 5,
+        "numCol": 7,
+        "numRow": 100
+    },
+    "summary": [
+
+    ],
+    "workingDir": ""
+}

@@ -91,9 +91,9 @@ class ASRE_Timoshenko_model:
                 c_lib = None
                 message = f'ASRE is not precompiled for {pltm}, please compile the ASRE cpp library'
         elif pltm == "darwin":
-            if platform.processor() == 'arm':
+            if platform.processor().startswith('i'): # Intel processor
                 lib_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                        "ASREcpp", "bin", "macOS_arm", "libASRElibTimoBeam.dylib")
+                                        "ASREcpp", "bin", "macOS", "libASRElibTimoBeam.dylib")
                 if os.path.exists(lib_path):
                     c_lib = CDLL(lib_path)
                 else:
@@ -101,7 +101,7 @@ class ASRE_Timoshenko_model:
                     message = f'ASRE is not precompiled for {pltm} {platform.processor()}, please compile the ASRE cpp library'
             else:
                 lib_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                        "ASREcpp", "bin", "macOS", "libASRElibTimoBeam.dylib")
+                                        "ASREcpp", "bin", "macOS_arm", "libASRElibTimoBeam.dylib")
                 if os.path.exists(lib_path):
                     c_lib = CDLL(lib_path)
                 else:
@@ -376,7 +376,7 @@ class ASRE_Timoshenko_model:
         # N / EA
         strain_axial_normal = self.axialForce / EA
         # ( M / EI ) * d
-        strain_axial_bending_top = -(self.moment / EI) * (self.dfoot - self.d_NA)  # Compressive strains in the top
+        strain_axial_bending_top = (self.moment / EI) * (self.dfoot - self.d_NA)  # Compressive strains in the top
         strain_axial_bending_bottom = (self.moment / EI) * self.d_NA
 
         # Navier's formula
@@ -396,6 +396,9 @@ class ASRE_Timoshenko_model:
         for i in range(len(tensile_strain_midpoint.flatten())):
             eps_t[i] = max(tensile_strain_midpoint[i], tensile_strain_top[i], tensile_strain_bottom[i])
         self.eps_t = eps_t
+        self.tensile_strain_top = tensile_strain_top
+        self.tensile_strain_bottom = tensile_strain_bottom
+        self.tensile_strain_midpoint = tensile_strain_midpoint
         return
 
     def get_beam_axis_disp(self):

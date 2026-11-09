@@ -14,8 +14,18 @@ cmake .. -G "Visual Studio 17 2022" -A x64
 cmake --build . --config Release --parallel
 cmake --install .
 ```
+## On macOS using Clang
+Latest macOS has clang available from Apple's lightweight command line tools
+```bash
+cd ASREp/ASREp/ASREcpp/src
+mkdir build
+cd build
+cmake -DCMAKE_C_COMPILER=/path/to/your/clang -DCMAKE_CXX_COMPILER=/path/to/your/clang++ -DCMAKE_BUILD_TYPE=Release ..
+cmake --build . --config Release --parallel
+cmake --install .
+```
 
-## On macOS using GCC
+## (Legacy)On macOS using GCC
 ```bash
 cd ASREp/ASREp/ASREcpp/src
 mkdir build
