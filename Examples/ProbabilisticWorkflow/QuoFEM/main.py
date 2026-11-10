@@ -4,7 +4,12 @@ import numpy as np
 
 import os
 
-ASREp_dir = "/Users/jinyanzhao/Desktop/tools/ASREp"
+# Path setup: find ASREp package and Input.py regardless of working directory
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))               # Input.py
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                '..', '..'))                                   # ASREp package
+sys.path.insert(0, r"C:\ASREp")
+ASREp_dir = "C:\\ASREp"
 if not os.path.exists(ASREp_dir):
     sys.exit('Error: Please set the ASREp_dir variable to the absolute path of the ASREp directory')
 sys.path.append(str(ASREp_dir))
